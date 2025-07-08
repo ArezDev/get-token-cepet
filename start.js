@@ -75,7 +75,7 @@ async function relogCokis(email, password, cookies, allowIG) {
                 const tokenPath = path.join(__dirname, 'token.txt');
                 try {
                     fs.writeFileSync(tokenPath, eaabMatch[1] + '\n', { flag: 'a' });
-                    console.log(`[✓] ${tokenPath}`);
+                    //console.log(`[✓] ${tokenPath}`);
                 } catch (writeErr) {
                     console.error(`[!] Failed to write token: ${writeErr.message}`);
                 }
@@ -153,6 +153,23 @@ const searchToken = async (cookies) => {
         })
         .filter(Boolean);
 
+    // Ask only once
+    const rl = readline.createInterface({
+        input: process.stdin,
+        output: process.stdout
+    });
+
+    const askAllowIG = () => {
+        return new Promise(resolve => {
+            rl.question('Allow Instagram? (y/n): ', answer => {
+                resolve(answer.trim().toLowerCase() === 'y' ? 'y' : 'n');
+            });
+        });
+    };
+
+    const allowIG = await askAllowIG();
+    rl.close();
+
     const concurrency = 5; // Set your desired concurrency
     let index = 0;
 
@@ -165,22 +182,6 @@ const searchToken = async (cookies) => {
                     (async () => {
                         await delay(i * 2000);
                         try {
-                            const rl = readline.createInterface({
-                                input: process.stdin,
-                                output: process.stdout
-                            });
-
-                            const askAllowIG = () => {
-                                return new Promise(resolve => {
-                                    rl.question('Allow Instagram? (y/n): ', answer => {
-                                        resolve(answer.trim().toLowerCase() === 'y');
-                                    });
-                                });
-                            };
-
-                            const allowIG = await askAllowIG();
-                            rl.close();
-
                             await relogCokis(uid, password, `sb=${sb}; datr=${datr};`, allowIG);
                         } catch (err) {
                             console.error(`[!] Error for sb=${sb} datr=${datr}:`, err.message);
