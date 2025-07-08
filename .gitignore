@@ -1,4 +1,6 @@
 .gitignore
 node_modules
-startBackup
-token
+startBackup.js
+token.js
+token.txt
+cokis.txt

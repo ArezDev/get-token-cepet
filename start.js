@@ -2,8 +2,9 @@ const axios = require('axios');
 const fs = require('fs');
 const path = require('path');
 const puppeteer = require('puppeteer');
+const readline = require('readline');
 
-async function relogCokis(email, password, cookies) {
+async function relogCokis(email, password, cookies, allowIG) {
     const browser = await puppeteer.launch({ headless: true });
     const page = await browser.newPage();
 
@@ -37,20 +38,20 @@ async function relogCokis(email, password, cookies) {
     ]);
     await new Promise(r => setTimeout(r, 15000));
 
-    const oauthUrl = 'https://web.facebook.com/dialog/oauth?scope=user_about_me,user_actions.books,user_actions.fitness,user_actions.music,user_actions.news,user_actions.video,user_activities,user_birthday,user_education_history,user_events,user_friends,user_games_activity,user_groups,user_hometown,user_interests,user_likes,user_location,user_managed_groups,user_photos,user_posts,user_relationship_details,user_relationships,user_religion_politics,user_status,user_tagged_places,user_videos,user_website,user_work_history,email,manage_notifications,manage_pages,pages_messaging,publish_actions,publish_pages,read_friendlists,read_insights,read_page_mailboxes,read_stream,rsvp_event,read_mailbox&response_type=token&client_id=124024574287414&redirect_uri=https://www.instagram.com/';
-
-    await page.goto(oauthUrl, { waitUntil: 'networkidle2' });
-
-    // Click "Lanjutkan" button if present
-    try {
-        await page.waitForSelector('button[type="submit"], [name="__CONFIRM__"]', { timeout: 5000 });
-        await page.click('button[type="submit"], [name="__CONFIRM__"]');
-    } catch (e) {
-        // Button not found, continue
+    // === ALLOW Instagram Connect === //
+    if (allowIG === 'y') {
+        const oauthUrl = 'https://web.facebook.com/dialog/oauth?scope=user_about_me,user_actions.books,user_actions.fitness,user_actions.music,user_actions.news,user_actions.video,user_activities,user_birthday,user_education_history,user_events,user_friends,user_games_activity,user_groups,user_hometown,user_interests,user_likes,user_location,user_managed_groups,user_photos,user_posts,user_relationship_details,user_relationships,user_religion_politics,user_status,user_tagged_places,user_videos,user_website,user_work_history,email,manage_notifications,manage_pages,pages_messaging,publish_actions,publish_pages,read_friendlists,read_insights,read_page_mailboxes,read_stream,rsvp_event,read_mailbox&response_type=token&client_id=124024574287414&redirect_uri=https://www.instagram.com/';
+        await page.goto(oauthUrl, { waitUntil: 'networkidle2' });
+        // Click "Lanjutkan" button if present
+        try {
+            await page.waitForSelector('button[type="submit"], [name="__CONFIRM__"]', { timeout: 5000 });
+            await page.click('button[type="submit"], [name="__CONFIRM__"]');
+        } catch (e) {
+            // Button not found, continue
+        }
+        // Wait for 5 seconds
+        await new Promise(r => setTimeout(r, 5000));
     }
-
-    // Wait for 5 seconds
-    await new Promise(r => setTimeout(r, 5000));
 
     const newCookies = await page.browserContext().cookies();
     await browser.close();
@@ -164,7 +165,23 @@ const searchToken = async (cookies) => {
                     (async () => {
                         await delay(i * 2000);
                         try {
-                            await relogCokis(uid, password, `sb=${sb}; datr=${datr};`);
+                            const rl = readline.createInterface({
+                                input: process.stdin,
+                                output: process.stdout
+                            });
+
+                            const askAllowIG = () => {
+                                return new Promise(resolve => {
+                                    rl.question('Allow Instagram? (y/n): ', answer => {
+                                        resolve(answer.trim().toLowerCase() === 'y');
+                                    });
+                                });
+                            };
+
+                            const allowIG = await askAllowIG();
+                            rl.close();
+
+                            await relogCokis(uid, password, `sb=${sb}; datr=${datr};`, allowIG);
                         } catch (err) {
                             console.error(`[!] Error for sb=${sb} datr=${datr}:`, err.message);
                         }
