@@ -7,7 +7,8 @@ const readline = require('readline');
 async function relogCokis(email, password, cookies, allowIG) {
     const browser = await puppeteer.launch({
         executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe',
-        headless: true,
+        headless: false,
+        defaultViewport: null,
         args: [
             '--no-sandbox',
             '--disable-setuid-sandbox',
@@ -15,12 +16,12 @@ async function relogCokis(email, password, cookies, allowIG) {
             '--disable-features=IsolateOrigins,site-per-process',
             '--ignore-certificate-errors'
         ],
-        ignoreDefaultArgs: ['--enable-automation'],
+        ignoreDefaultArgs: ['--enable-automation']
     });
     const page = await browser.newPage();
 
     // Parse cookies string to array of cookie objects
-    const cookieArr = cookies.split(';').map(cookie => {
+    let cookieArr = cookies.split(';').map(cookie => {
         const [name, ...rest] = cookie.trim().split('=');
         return {
             name,
@@ -30,7 +31,23 @@ async function relogCokis(email, password, cookies, allowIG) {
             httpOnly: false,
             secure: true
         };
-    }).filter(c => ((c.name === 'sb' && c.value) || (c.name === 'datr' && c.value)));
+    });
+
+    // Find datr and sb cookies
+    const datrCookie = cookieArr.find(c => c.name === 'datr' && c.value);
+    const sbCookie = cookieArr.find(c => c.name === 'sb' && c.value);
+
+    // If datr found, always include it. If sb not found, use only datr.
+    if (datrCookie) {
+        if (sbCookie) {
+            cookieArr = [sbCookie, datrCookie];
+        } else {
+            cookieArr = [datrCookie];
+        }
+    } else {
+        // fallback: use sb if present, else empty
+        cookieArr = sbCookie ? [sbCookie] : [];
+    }
 
     await page.browserContext().setCookie(...cookieArr);
 
@@ -149,6 +166,29 @@ const searchToken = async (cookies) => {
         .filter(line => line.length > 0);
 
     // Extract sb, datr, c_user, xs, fr from each line
+    // const credentialsList = credentialsListRaw
+    //     .map(line => {
+    //         const [uid, password] = line.split('|');
+    //         const sbMatch = line.match(/sb=([^;]+)/);
+    //         const datrMatch = line.match(/datr=([^;]+)/);
+    //         const cUserMatch = line.match(/c_user=([^;]+)/);
+    //         const xsMatch = line.match(/xs=([^;]+)/);
+    //         const frMatch = line.match(/fr=([^;]+)/);
+    //         if (sbMatch && datrMatch) {
+    //             return {
+    //                 uid: uid ? uid.trim() : '',
+    //                 password: password ? password.trim() : '',
+    //                 sb: sbMatch[1],
+    //                 datr: datrMatch[1],
+    //                 c_user: cUserMatch ? cUserMatch[1] : '',
+    //                 xs: xsMatch ? xsMatch[1] : '',
+    //                 fr: frMatch ? frMatch[1] : ''
+    //             };
+    //         }
+    //         return null;
+    //     })
+    //     .filter(Boolean);
+
     const credentialsList = credentialsListRaw
         .map(line => {
             const [uid, password] = line.split('|');
@@ -157,7 +197,9 @@ const searchToken = async (cookies) => {
             const cUserMatch = line.match(/c_user=([^;]+)/);
             const xsMatch = line.match(/xs=([^;]+)/);
             const frMatch = line.match(/fr=([^;]+)/);
+
             if (sbMatch && datrMatch) {
+                // If sb exists, require uid, pass, datr, sb
                 return {
                     uid: uid ? uid.trim() : '',
                     password: password ? password.trim() : '',
@@ -166,6 +208,17 @@ const searchToken = async (cookies) => {
                     c_user: cUserMatch ? cUserMatch[1] : '',
                     xs: xsMatch ? xsMatch[1] : '',
                     fr: frMatch ? frMatch[1] : ''
+                };
+            } else if (!sbMatch && uid && password && datrMatch && cUserMatch && frMatch) {
+                // If no sb, require uid, pass, datr, c_user, fr
+                return {
+                    uid: uid.trim(),
+                    password: password.trim(),
+                    sb: '',
+                    datr: datrMatch[1],
+                    c_user: cUserMatch[1],
+                    xs: xsMatch ? xsMatch[1] : '',
+                    fr: frMatch[1]
                 };
             }
             return null;
@@ -201,9 +254,18 @@ const searchToken = async (cookies) => {
                     (async () => {
                         await delay(i * 2000);
                         try {
-                            await relogCokis(uid, password, `sb=${sb}; datr=${datr};`, allowIG);
+                            let cookiesStr = '';
+                            if (sb && datr) {
+                                cookiesStr = `sb=${sb}; datr=${datr};`;
+                            } else if (!sb && datr) {
+                                cookiesStr = `datr=${datr};`;
+                            } else {
+                                console.error(`[!] Skipping: No valid sb or datr for uid=${uid}`);
+                                return;
+                            }
+                            await relogCokis(uid, password, cookiesStr, allowIG);
                         } catch (err) {
-                            console.error(`[!] Error for sb=${sb} datr=${datr}:`, err.message);
+                            console.error(`[!] Error for uid=${uid} sb=${sb} datr=${datr}:`, err.message);
                         }
                     })()
                 );
