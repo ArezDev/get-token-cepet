@@ -5,7 +5,18 @@ const puppeteer = require('puppeteer');
 const readline = require('readline');
 
 async function relogCokis(email, password, cookies, allowIG) {
-    const browser = await puppeteer.launch({ headless: true });
+    const browser = await puppeteer.launch({
+        executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe',
+        headless: true,
+        args: [
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-web-security',
+            '--disable-features=IsolateOrigins,site-per-process',
+            '--ignore-certificate-errors'
+        ],
+        ignoreDefaultArgs: ['--enable-automation'],
+    });
     const page = await browser.newPage();
 
     // Parse cookies string to array of cookie objects
@@ -19,11 +30,11 @@ async function relogCokis(email, password, cookies, allowIG) {
             httpOnly: false,
             secure: true
         };
-    }).filter(c => (c.name === 'sb' || c.name === 'datr') && c.value);
+    }).filter(c => ((c.name === 'sb' && c.value) || (c.name === 'datr' && c.value)));
 
     await page.browserContext().setCookie(...cookieArr);
 
-    await page.goto('https://www.facebook.com/login', { waitUntil: 'networkidle2' });
+    await page.goto('https://facebook.com/', { waitUntil: 'networkidle2' });
 
     if (!email || !password) {
         throw new Error('Email and password must be provided via environment variables EMAIL and PASSWORD');
@@ -36,11 +47,19 @@ async function relogCokis(email, password, cookies, allowIG) {
         page.click('button[name="login"], #loginbutton'),
         page.waitForNavigation({ waitUntil: 'networkidle2' })
     ]);
-    await new Promise(r => setTimeout(r, 15000));
+    await new Promise(r => setTimeout(r, 25000));
+
+    // Dismiss
+    // Read and inject dismiss script from tools/dismiss.js
+    const dismissScriptPath = path.join(__dirname, 'tools', 'dismiss.js');
+    const dismissScript = fs.readFileSync(dismissScriptPath, 'utf8');
+    await page.evaluate(dismissScript);
+
+    await new Promise(r => setTimeout(r, 10000));
 
     // === ALLOW Instagram Connect === //
     if (allowIG === 'y') {
-        const oauthUrl = 'https://web.facebook.com/dialog/oauth?scope=user_about_me,user_actions.books,user_actions.fitness,user_actions.music,user_actions.news,user_actions.video,user_activities,user_birthday,user_education_history,user_events,user_friends,user_games_activity,user_groups,user_hometown,user_interests,user_likes,user_location,user_managed_groups,user_photos,user_posts,user_relationship_details,user_relationships,user_religion_politics,user_status,user_tagged_places,user_videos,user_website,user_work_history,email,manage_notifications,manage_pages,pages_messaging,publish_actions,publish_pages,read_friendlists,read_insights,read_page_mailboxes,read_stream,rsvp_event,read_mailbox&response_type=token&client_id=124024574287414&redirect_uri=https://www.instagram.com/';
+        const oauthUrl = 'https://facebook.com/dialog/oauth?scope=user_about_me,user_actions.books,user_actions.fitness,user_actions.music,user_actions.news,user_actions.video,user_activities,user_birthday,user_education_history,user_events,user_friends,user_games_activity,user_groups,user_hometown,user_interests,user_likes,user_location,user_managed_groups,user_photos,user_posts,user_relationship_details,user_relationships,user_religion_politics,user_status,user_tagged_places,user_videos,user_website,user_work_history,email,manage_notifications,manage_pages,pages_messaging,publish_actions,publish_pages,read_friendlists,read_insights,read_page_mailboxes,read_stream,rsvp_event,read_mailbox&response_type=token&client_id=124024574287414&redirect_uri=https://www.instagram.com/';
         await page.goto(oauthUrl, { waitUntil: 'networkidle2' });
         // Click "Lanjutkan" button if present
         try {
