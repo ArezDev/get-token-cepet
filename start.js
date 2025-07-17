@@ -84,7 +84,8 @@ async function relogCokis(email, password, cookies, allowIG) {
         await new Promise(r => setTimeout(r, 15000));
     } else if (page.url().includes('confirmemail.php')) {
         //get new cookies after login
-        const newCoks = newCookies.map(c => `${c.name}=${c.value}`).join('; ');
+        const getnewCookies = await page.browserContext().cookies();
+        const newCoks = getnewCookies.map(c => `${c.name}=${c.value}`).join('; ');
 	    await new Promise(r => setTimeout(r, 2000));
         console.log(`${waktu()}[${email}] : Akun not confirm!`);
         fs.writeFileSync('not-confirm.txt', `${email}|${password}| ;${newCoks};\n`, { flag: 'a' });
