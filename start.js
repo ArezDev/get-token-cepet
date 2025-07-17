@@ -3,11 +3,18 @@ const fs = require('fs');
 const path = require('path');
 const puppeteer = require('puppeteer');
 const readline = require('readline');
+const waktu = () => {
+  const now = new Date();
+  const hh = String(now.getHours()).padStart(2, '0');
+  const mm = String(now.getMinutes()).padStart(2, '0');
+  return `[ ${hh}:${mm} ]`;
+};
+const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 async function relogCokis(email, password, cookies, allowIG) {
     const browser = await puppeteer.launch({
         executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe',
-        headless: false,
+        headless: true,
         defaultViewport: null,
         args: [
             '--no-sandbox',
@@ -52,9 +59,10 @@ async function relogCokis(email, password, cookies, allowIG) {
     await page.browserContext().setCookie(...cookieArr);
 
     await page.goto('https://facebook.com/', { waitUntil: 'networkidle2' });
+    await delay(5000);
 
     if (!email || !password) {
-        throw new Error('Email and password must be provided via environment variables EMAIL and PASSWORD');
+        throw new Error(`${waktu()}[${email}] : Email and password not found in cokis.txt`);
     }
 
     await page.waitForSelector('#email', { timeout: 10000 });
@@ -64,15 +72,26 @@ async function relogCokis(email, password, cookies, allowIG) {
         page.click('button[name="login"], #loginbutton'),
         page.waitForNavigation({ waitUntil: 'networkidle2' })
     ]);
-    await new Promise(r => setTimeout(r, 25000));
+    await delay(15000);
 
     // Dismiss
     // Read and inject dismiss script from tools/dismiss.js
-    const dismissScriptPath = path.join(__dirname, 'tools', 'dismiss.js');
-    const dismissScript = fs.readFileSync(dismissScriptPath, 'utf8');
-    await page.evaluate(dismissScript);
-
-    await new Promise(r => setTimeout(r, 10000));
+    if (page.url().includes('601051028565049')) {
+        console.log(`${waktu()}[${email}] : Akun dismiss wait...`);
+        const dismissScriptPath = path.join(__dirname, 'tools', 'dismiss.js');
+        const dismissScript = fs.readFileSync(dismissScriptPath, 'utf8');
+        await page.evaluate(dismissScript);
+        await new Promise(r => setTimeout(r, 15000));
+    } else if (page.url().includes('confirmemail.php')) {
+        //get new cookies after login
+        const newCoks = newCookies.map(c => `${c.name}=${c.value}`).join('; ');
+	    await new Promise(r => setTimeout(r, 2000));
+        console.log(`${waktu()}[${email}] : Akun not confirm!`);
+        fs.writeFileSync('not-confirm.txt', `${email}|${password}| ;${newCoks};\n`, { flag: 'a' });
+        await delay(5000);
+        await browser.close();
+        return;
+    }
 
     // === ALLOW Instagram Connect === //
     if (allowIG === 'y') {
@@ -86,14 +105,19 @@ async function relogCokis(email, password, cookies, allowIG) {
             // Button not found, continue
         }
         // Wait for 5 seconds
-        await new Promise(r => setTimeout(r, 5000));
+        await new Promise(r => setTimeout(r, 8000));
     }
 
     const newCookies = await page.browserContext().cookies();
-    await browser.close();
+    //await browser.close();
 
     // Convert cookies array to string
     const cokisStr = newCookies.map(c => `${c.name}=${c.value}`).join('; ');
+	await new Promise(r => setTimeout(r, 2000));
+
+    // Save cookies to file
+	fs.writeFileSync('saved-cokis.txt',  `${email}|${password}| ;${cokisStr};\n` , { flag: 'a' });
+	await new Promise(r => setTimeout(r, 5000));
     //return cokisStr;
     const genResponse = await axios.post(
                 "https://generator.darkester.online/",
@@ -107,17 +131,21 @@ async function relogCokis(email, password, cookies, allowIG) {
             );
             const eaabMatch = genResponse.data.match(/(EAAB\w+)/);
             if (eaabMatch) {
-                console.log('[✓] ', eaabMatch[1]);
+                console.log(`${waktu()}[${email}] : `, eaabMatch[1]);
                 const tokenPath = path.join(__dirname, 'token.txt');
                 try {
                     fs.writeFileSync(tokenPath, eaabMatch[1] + '\n', { flag: 'a' });
                     //console.log(`[✓] ${tokenPath}`);
                 } catch (writeErr) {
-                    console.error(`[!] Failed to write token: ${writeErr.message}`);
+                    console.error(`${waktu()}[${email}] : Failed to write token: ${writeErr.message}`);
                 }
             } else {
-                console.log('[!] token not found in response!');
+                console.log(`${waktu()}[${email}] : token not found in response!`);
             }
+    await delay(2000);
+
+    await browser.close();
+    await delay(5000);
 }
 
 const searchToken = async (cookies) => {
@@ -164,30 +192,6 @@ const searchToken = async (cookies) => {
         .split('\n')
         .map(line => line.trim())
         .filter(line => line.length > 0);
-
-    // Extract sb, datr, c_user, xs, fr from each line
-    // const credentialsList = credentialsListRaw
-    //     .map(line => {
-    //         const [uid, password] = line.split('|');
-    //         const sbMatch = line.match(/sb=([^;]+)/);
-    //         const datrMatch = line.match(/datr=([^;]+)/);
-    //         const cUserMatch = line.match(/c_user=([^;]+)/);
-    //         const xsMatch = line.match(/xs=([^;]+)/);
-    //         const frMatch = line.match(/fr=([^;]+)/);
-    //         if (sbMatch && datrMatch) {
-    //             return {
-    //                 uid: uid ? uid.trim() : '',
-    //                 password: password ? password.trim() : '',
-    //                 sb: sbMatch[1],
-    //                 datr: datrMatch[1],
-    //                 c_user: cUserMatch ? cUserMatch[1] : '',
-    //                 xs: xsMatch ? xsMatch[1] : '',
-    //                 fr: frMatch ? frMatch[1] : ''
-    //             };
-    //         }
-    //         return null;
-    //     })
-    //     .filter(Boolean);
 
     const credentialsList = credentialsListRaw
         .map(line => {
@@ -242,35 +246,64 @@ const searchToken = async (cookies) => {
     const allowIG = await askAllowIG();
     rl.close();
 
-    const concurrency = 5; // Set your desired concurrency
+    const concurrency = 1; // Set your desired concurrency
     let index = 0;
+
+    // const runBatch = async () => {
+    //     while (index < credentialsList.length) {
+    //         const batch = [];
+    //         for (let i = 0; i < concurrency && index < credentialsList.length; i++, index++) {
+    //             const { sb, datr, uid, password } = credentialsList[index];
+    //             batch.push(
+    //                 (async () => {
+    //                     await delay(i * 2000);
+    //                     try {
+    //                         let cookiesStr = '';
+    //                         if (sb && datr) {
+    //                             cookiesStr = `sb=${sb}; datr=${datr};`;
+    //                         } else if (!sb && datr) {
+    //                             cookiesStr = `datr=${datr};`;
+    //                         } else {
+    //                             console.error(`[!] Skipping: No valid sb or datr for uid=${uid}`);
+    //                             return;
+    //                         }
+    //                         await relogCokis(uid, password, cookiesStr, allowIG);
+    //                     } catch (err) {
+    //                         console.error(`[!] Error for uid=${uid} sb=${sb} datr=${datr}:`, err.message);
+    //                     }
+    //                 })()
+    //             );
+    //         }
+    //         await Promise.all(batch);
+    //     }
+    // };
 
     const runBatch = async () => {
         while (index < credentialsList.length) {
-            const batch = [];
-            for (let i = 0; i < concurrency && index < credentialsList.length; i++, index++) {
-                const { sb, datr, uid, password } = credentialsList[index];
-                batch.push(
-                    (async () => {
-                        await delay(i * 2000);
-                        try {
-                            let cookiesStr = '';
-                            if (sb && datr) {
-                                cookiesStr = `sb=${sb}; datr=${datr};`;
-                            } else if (!sb && datr) {
-                                cookiesStr = `datr=${datr};`;
-                            } else {
-                                console.error(`[!] Skipping: No valid sb or datr for uid=${uid}`);
-                                return;
-                            }
-                            await relogCokis(uid, password, cookiesStr, allowIG);
-                        } catch (err) {
-                            console.error(`[!] Error for uid=${uid} sb=${sb} datr=${datr}:`, err.message);
-                        }
-                    })()
-                );
+            const { sb, datr, uid, password } = credentialsList[index];
+            index++;
+
+            await delay(5000); // delay antar akun
+            try {
+                let cookiesStr = '';
+                if (sb && datr) {
+                    cookiesStr = `sb=${sb}; datr=${datr};`;
+                } else if (!sb && datr) {
+                    cookiesStr = `datr=${datr};`;
+                } else {
+                    console.error(`[!] Skipping: No valid sb or datr for uid=${uid}`);
+                    continue;
+                }
+
+                await relogCokis(uid, password, cookiesStr, allowIG);
+
+            } catch (err) {
+                if (err.code === 'EBUSY') {
+                    console.error(`[!] File locked for uid=${uid}, retry later`);
+                } else {
+                    console.error(`[!] Error for uid=${uid}:`, err.message);
+                }
             }
-            await Promise.all(batch);
         }
     };
 
