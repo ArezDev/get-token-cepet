@@ -1,4 +1,5 @@
 .gitignore
+not-confirm.txt
 node_modules
 startBackup.js
 token.js
