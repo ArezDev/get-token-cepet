@@ -14,7 +14,7 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 async function relogCokis(email, password, cookies, allowIG) {
     const browser = await puppeteer.launch({
         executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe',
-        headless: true,
+        headless: false,
         defaultViewport: null,
         args: [
             '--no-sandbox',
@@ -101,8 +101,21 @@ async function relogCokis(email, password, cookies, allowIG) {
         await page.goto(oauthUrl, { waitUntil: 'networkidle2' });
         // Click "Lanjutkan" button if present
         try {
-            await page.waitForSelector('button[type="submit"], [name="__CONFIRM__"]', { timeout: 5000 });
-            await page.click('button[type="submit"], [name="__CONFIRM__"]');
+            // Wait for either button[type="submit"] or [name="__CONFIRM__"] to appear, then click the one that exists
+            let clicked = false;
+            try {
+                await page.waitForSelector('button[type="submit"]', { timeout: 15000 });
+                await page.click('button[type="submit"]');
+                clicked = true;
+            } catch (e) {}
+            if (!clicked) {
+                try {
+                    await page.waitForSelector('[name="__CONFIRM__"]', { timeout: 5000 });
+                    await page.click('[name="__CONFIRM__"]');
+                } catch (e) {
+                    // No confirm button found, continue
+                }
+            }
         } catch (e) {
             // Button not found, continue
         }
@@ -113,6 +126,10 @@ async function relogCokis(email, password, cookies, allowIG) {
     // Convert cookies array to string
     const newCookies = await page.browserContext().cookies();
     const cokisStr = newCookies.map(c => `${c.name}=${c.value}`).join('; ');
+    const cUserXS = newCookies
+        .filter(c => c.name === 'c_user' || c.name === 'xs')
+        .map(c => `${c.name}=${c.value}`)
+        .join('; ');
 	await new Promise(r => setTimeout(r, 2000));
 
     // Save cookies to file
@@ -121,7 +138,7 @@ async function relogCokis(email, password, cookies, allowIG) {
 
     const njupokToken = await axios.post(
                 "https://generator.darkester.online/",
-                `cookie=${encodeURIComponent(cokisStr)}`,
+                `cookie=${encodeURIComponent(cUserXS)}`,
                 {
                     headers: {
                         "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
