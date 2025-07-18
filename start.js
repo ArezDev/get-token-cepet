@@ -25,6 +25,7 @@ async function relogCokis(email, password, cookies, allowIG) {
         ],
         ignoreDefaultArgs: ['--enable-automation']
     });
+    try {
     const page = await browser.newPage();
 
     // Parse cookies string to array of cookie objects
@@ -57,25 +58,25 @@ async function relogCokis(email, password, cookies, allowIG) {
     }
 
     await page.browserContext().setCookie(...cookieArr);
+    await delay(2000);
 
-    await page.goto('https://facebook.com/', { waitUntil: 'networkidle2' });
+    await page.goto('https://facebook.com/?locale=id_ID', { waitUntil: 'networkidle2' });
     await delay(5000);
 
     if (!email || !password) {
         throw new Error(`${waktu()}[${email}] : Email and password not found in cokis.txt`);
     }
 
-    await page.waitForSelector('#email', { timeout: 10000 });
-    await page.type('#email', email, { delay: 50 });
-    await page.type('#pass', password, { delay: 50 });
+    await page.waitForSelector('#email', { timeout: 5000 });
+    await page.type('#email', email, { delay: 25 });
+    await page.type('#pass', password, { delay: 25 });
     await Promise.all([
         page.click('button[name="login"], #loginbutton'),
         page.waitForNavigation({ waitUntil: 'networkidle2' })
     ]);
     await delay(15000);
 
-    // Dismiss
-    // Read and inject dismiss script from tools/dismiss.js
+    // cek akun login
     if (page.url().includes('601051028565049')) {
         console.log(`${waktu()}[${email}] : Akun dismiss wait...`);
         const dismissScriptPath = path.join(__dirname, 'tools', 'dismiss.js');
@@ -105,22 +106,20 @@ async function relogCokis(email, password, cookies, allowIG) {
         } catch (e) {
             // Button not found, continue
         }
-        // Wait for 5 seconds
-        await new Promise(r => setTimeout(r, 8000));
+        // Wait for 10 seconds
+        await new Promise(r => setTimeout(r, 10000));
     }
-
-    const newCookies = await page.browserContext().cookies();
-    //await browser.close();
-
+    
     // Convert cookies array to string
+    const newCookies = await page.browserContext().cookies();
     const cokisStr = newCookies.map(c => `${c.name}=${c.value}`).join('; ');
 	await new Promise(r => setTimeout(r, 2000));
 
     // Save cookies to file
 	fs.writeFileSync('saved-cokis.txt',  `${email}|${password}| ;${cokisStr};\n` , { flag: 'a' });
 	await new Promise(r => setTimeout(r, 5000));
-    //return cokisStr;
-    const genResponse = await axios.post(
+
+    const njupokToken = await axios.post(
                 "https://generator.darkester.online/",
                 `cookie=${encodeURIComponent(cokisStr)}`,
                 {
@@ -130,7 +129,7 @@ async function relogCokis(email, password, cookies, allowIG) {
                     }
                 }
             );
-            const eaabMatch = genResponse.data.match(/(EAAB\w+)/);
+            const eaabMatch = njupokToken.data.match(/(EAAB\w+)/);
             if (eaabMatch) {
                 console.log(`${waktu()}[${email}] : `, eaabMatch[1]);
                 const tokenPath = path.join(__dirname, 'token.txt');
@@ -143,47 +142,14 @@ async function relogCokis(email, password, cookies, allowIG) {
             } else {
                 console.log(`${waktu()}[${email}] : token not found in response!`);
             }
-    await delay(2000);
 
-    await browser.close();
-    await delay(5000);
-}
-
-const searchToken = async (cookies) => {
-    try {
-        const genResponse = await axios.post(
-                "https://generator.darkester.online/",
-                `cookie=${encodeURIComponent(cookies)}`,
-                {
-                    headers: {
-                        "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
-                        "content-type": "application/x-www-form-urlencoded",
-                    }
-                }
-            );
-            const eaabMatch = genResponse.data.match(/(EAAB\w+)/);
-            if (eaabMatch) {
-                console.log('[✓] ', eaabMatch[1]);
-                const tokenPath = path.join(__dirname, 'token.txt');
-                try {
-                    fs.writeFileSync(tokenPath, eaabMatch[1] + '\n', { flag: 'a' });
-                    console.log(`[✓] Token written to ${tokenPath}`);
-                } catch (writeErr) {
-                    console.error(`[!] Failed to write token: ${writeErr.message}`);
-                }
-            } else {
-                console.log('[!] token not found in response!');
-            }
-    } catch (error) {
-        if (error.response) {
-            console.log('Status:', error.response.status);
-            console.log('Headers:', error.response.headers);
-            console.log('Data:', error.response.data);
-        } else {
-            console.error('Error:', error.message);
-        }
+    } catch (err) {
+        console.error(`${waktu()}[${email}] : ERROR`, err.message);
+    } finally {
+        await browser.close();
+        await delay(5000);
     }
-};
+}
 
 (async () => {
     const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -247,38 +213,7 @@ const searchToken = async (cookies) => {
     const allowIG = await askAllowIG();
     rl.close();
 
-    const concurrency = 1; // Set your desired concurrency
     let index = 0;
-
-    // const runBatch = async () => {
-    //     while (index < credentialsList.length) {
-    //         const batch = [];
-    //         for (let i = 0; i < concurrency && index < credentialsList.length; i++, index++) {
-    //             const { sb, datr, uid, password } = credentialsList[index];
-    //             batch.push(
-    //                 (async () => {
-    //                     await delay(i * 2000);
-    //                     try {
-    //                         let cookiesStr = '';
-    //                         if (sb && datr) {
-    //                             cookiesStr = `sb=${sb}; datr=${datr};`;
-    //                         } else if (!sb && datr) {
-    //                             cookiesStr = `datr=${datr};`;
-    //                         } else {
-    //                             console.error(`[!] Skipping: No valid sb or datr for uid=${uid}`);
-    //                             return;
-    //                         }
-    //                         await relogCokis(uid, password, cookiesStr, allowIG);
-    //                     } catch (err) {
-    //                         console.error(`[!] Error for uid=${uid} sb=${sb} datr=${datr}:`, err.message);
-    //                     }
-    //                 })()
-    //             );
-    //         }
-    //         await Promise.all(batch);
-    //     }
-    // };
-
     const runBatch = async () => {
         while (index < credentialsList.length) {
             const { sb, datr, uid, password } = credentialsList[index];
